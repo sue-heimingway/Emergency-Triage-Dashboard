@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>候诊中 · 急诊分诊</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  html, body { background: #f6f8fb; }
+  .h5 { max-width: 520px; margin: 0 auto; padding: 0 0 28px; min-height: 100vh; }
+  .h5-top {
+    background: linear-gradient(160deg, #e11d48, #9f1239);
+    color: #fff; padding: 18px 18px 26px; border-radius: 0 0 22px 22px;
+    box-shadow: 0 18px 40px -22px rgba(159, 18, 57, .8);
+  }
+  .h5-top .row1 { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: .85; }
+  .h5-top h1 { margin: 10px 0 2px; font-size: 20px; letter-spacing: -.3px; }
+  .h5-top .sub { font-size: 12.5px; opacity: .8; }
+  .h5-hero {
+    margin: -16px 14px 0; background: #fff; border-radius: 18px;
+    box-shadow: 0 12px 30px -18px rgba(15, 23, 42, .5); padding: 18px 16px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .ring {
+    width: 92px; height: 92px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; text-align: center;
+    background: conic-gradient(var(--c, #2563eb) 0 var(--p, 30%), #e8eef7 var(--p, 30%) 100%);
+    position: relative;
+  }
+  .ring::after {
+    content: ""; position: absolute; inset: 7px; border-radius: 50%; background: #fff;
+  }
+  .ring b { position: relative; z-index: 1; font-size: 26px; font-family: var(--mono); line-height: 1; }
+  .ring span { position: relative; z-index: 1; font-size: 9.5px; color: var(--ink-3); display: block; }
+  .hero-main { flex: 1; min-width: 0; }
+  .hero-main .big { font-size: 16px; font-weight: 700; }
+  .hero-main .big em { font-style: normal; color: var(--red); font-family: var(--mono); }
+  .hero-main .sm { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+  .hero-main .tiny { font-size: 11px; color: var(--ink-3); margin-top: 6px; }
+
+  .h5-sec { margin: 14px; }
+  .h5-sec h2 {
+    font-size: 13px; margin: 0 0 9px; color: var(--ink-2);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .h5-sec h2::before { content: ""; width: 3px; height: 13px; background: var(--red); border-radius: 2px; }
+  .act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .act {
+    border: 1px solid var(--line); background: #fff; border-radius: 14px;
+    padding: 14px 12px; text-align: left; cursor: pointer;
+    box-shadow: 0 6px 16px -14px rgba(15, 23, 42, .5);
+    transition: transform .12s, border-color .15s;
+  }
+  .act:active { transform: scale(.98); }
+  .act .em { font-size: 18px; display: block; margin-bottom: 5px; }
+  .act b { display: block; font-size: 13.5px; }
+  .act span { font-size: 11px; color: var(--ink-3); }
+  .act.urgent { border-color: var(--red-line); background: linear-gradient(180deg, #fff, #fff5f4); }
+
+  .notice {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px; font-size: 12.5px; line-height: 1.75; color: var(--ink-2);
+    white-space: pre-wrap;
+  }
+  .reply {
+    margin: 14px; border-radius: 14px; padding: 14px;
+    background: #fff5f4; border: 1px solid var(--red-line); color: #912018;
+    font-size: 13px; line-height: 1.7; display: none;
+  }
+  .reply .tag { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; opacity: .8; }
+  .tips { margin: 12px 14px 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.8; }
+  .tips b { color: #b42318; }
+
+  /* NRS 弹层 */
+  .sheet-mask {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
+    display: none; align-items: flex-end; z-index: 60;
+  }
+  .sheet-mask.on { display: flex; }
+  .sheet {
+    width: 100%; max-width: 520px; margin: 0 auto; background: #fff;
+    border-radius: 20px 20px 0 0; padding: 20px 18px 26px;
+    animation: up .22s ease;
+  }
+  @keyframes up { from { transform: translateY(30px); opacity: .6; } }
+  .sheet h3 { margin: 0 0 4px; font-size: 16px; }
+  .sheet p { margin: 0 0 14px; font-size: 12px; color: var(--ink-3); }
+  .nrs-scale { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; margin-bottom: 6px; }
+  .nrs-btn {
+    aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--line-2);
+    background: #fff; font-family: var(--mono); font-size: 12.5px; cursor: pointer; color: var(--ink-2);
+  }
+  .nrs-btn.on { background: var(--red); border-color: var(--red); color: #fff; font-weight: 700; }
+  .nrs-legend { display: flex; justify-content: space-between; font-size: 10px; color: var(--ink-3); margin-bottom: 14px; }
+  .sheet .btn-row { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+  .sheet .btn { padding: 11px; font-size: 13.5px; }
+  .toast-host { bottom: 84px; }
+</style>
+</head>
+<body>
+<div class="h5" id="app">
+  <div class="h5-top">
+    <div class="row1">
+      <span>仁和医院 · 急诊科</span>
+      <span style="margin-left:auto" id="stage-chip">候诊中</span>
+    </div>
+    <h1 id="greet">正在加载…</h1>
+    <div class="sub" id="subline">请保持手机在身边</div>
+  </div>
+
+  <div class="h5-hero">
+    <div class="ring" id="ring" style="--p:12%">
+      <div><b id="pos">—</b><span id="pos-label">队列位次</span></div>
+    </div>
+    <div class="hero-main">
+      <div class="big" id="waitline">预计等待 <em id="wait">—</em> 分钟</div>
+      <div class="sm" id="ahead">前面还有 — 位患者</div>
+      <div class="tiny" id="updated">刚刚更新</div>
+    </div>
+  </div>
+
+  <div class="h5-sec">
+    <h2>你现在感觉怎么样？</h2>
+    <div class="act-grid">
+      <button class="act urgent" data-kind="pain">
+        <span class="em">🔥</span><b>更痛了</b><span>疼得比刚来时厉害</span>
+      </button>
+      <button class="act urgent" data-kind="dyspnea">
+        <span class="em">😮‍💨</span><b>喘不上气</b><span>气短、憋气、吸不上氧</span>
+      </button>
+      <button class="act" data-kind="bleeding">
+        <span class="em">🩸</span><b>出血了</b><span>止不住的出血</span>
+      </button>
+      <button class="act" data-kind="mental">
+        <span class="em">😵</span><b>意识模糊</b><span>家人帮点：叫不醒/说胡话</span>
+      </button>
+    </div>
+    <div class="small muted" style="margin-top:9px;line-height:1.7">
+      点一下就会<strong>立刻重新评估</strong>，不是普通的「留言」，值班主任会同时收到提醒。
+    </div>
+  </div>
+
+  <div class="reply" id="reply">
+    <div class="tag" id="reply-tag">已收到</div>
+    <div id="reply-text" style="margin-top:5px"></div>
+    <div style="margin-top:9px;font-size:11.5px;opacity:.8" id="reply-extra"></div>
+  </div>
+
+  <div class="h5-sec">
+    <h2>医生给你的解释</h2>
+    <div class="notice" id="notice">正在取号…</div>
+  </div>
+
+  <div class="tips">
+    <b>出现以下情况请立刻叫护士，不要等：</b><br>
+    突然剧烈胸痛 / 说话含糊、口角歪斜、一侧无力 / 喘不上气 / 意识模糊 / 出血不止<br>
+    <span id="disclaimer" style="display:block;margin-top:10px;opacity:.75"></span>
+  </div>
+</div>
+
+<div class="sheet-mask" id="sheet">
+  <div class="sheet">
+    <h3>现在有多痛？</h3>
+    <p>0 = 完全不痛　10 = 能想象到的最痛</p>
+    <div class="nrs-scale" id="nrs-scale"></div>
+    <div class="nrs-legend"><span>不痛</span><span>中等</span><span>无法忍受</span></div>
+    <div class="btn-row">
+      <button class="btn" id="sheet-cancel">取消</button>
+      <button class="btn btn-primary" id="sheet-submit">提交给护士站</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+(() => {
+  const token = new URLSearchParams(location.search).get("t") || "";
+  let view = null;
+  let pickedNrs = 7;
+
+  const KIND_LABEL = { pain: "疼痛加重", dyspnea: "呼吸困难加重", bleeding: "出血", mental: "意识改变", fever: "寒战高热" };
+  const KIND_ICON = { pain: "🔥", dyspnea: "😮‍💨", bleeding: "🩸", mental: "😵", fever: "🥵" };
+
+  if (!token) {
+    $("#greet").textContent = "链接无效";
+    $("#notice").textContent = "请在护士站重新扫码生成候诊链接。";
+    return;
+  }
+
+  function paint(v) {
+    view = v;
+    $("#greet").textContent = v.name + "，你好";
+    $("#subline").textContent = v.taken_over ? "医生已接管你的诊疗"
+      : (v.esi <= 1 ? "医生正在抢救，请留在床上不要走动" : "请留在候诊区，不要离开");
+    $("#stage-chip").textContent = v.stage;
+    $("#pos").textContent = v.position || "—";
+    $("#waitline").innerHTML = v.wait_minutes > 0
+      ? `预计等待 <em id="wait">${v.wait_minutes}</em> 分钟`
+      : '已进入<strong style="color:var(--red)">抢救序列</strong>，无需排队';
+    $("#ahead").textContent = v.esi <= 1
+      ? "医生正在处理你，请留在床上不要自行走动"
+      : `前面还有 ${v.ahead} 位患者 · 候诊区共 ${v.total_waiting} 位`;
+    $("#updated").textContent = "更新于 " + (v.updated_at || "").slice(-8);
+    $("#notice").textContent = v.notice || "";
+    const pct = v.esi <= 1 ? 100 : Math.max(8, Math.min(100, 100 - (v.ahead || 0) * 12));
+    $("#pos-label").textContent = v.esi <= 1 ? "正在处理" : "队列位次";
+    $("#ring").style.setProperty("--p", pct + "%");
+    $("#ring").style.setProperty("--c", v.esi <= 2 ? "#e8590c" : "#2563eb");
+    if (v.taken_over) {
+      $("#reply").style.display = "block";
+      $("#reply").style.background = "#ecfdf3";
+      $("#reply").style.borderColor = "#abefc6";
+      $("#reply").style.color = "#067647";
+      $("#reply-tag").textContent = "已接管";
+      $("#reply-text").textContent = "值班医生已经接管你的诊疗，请在候诊区等待护士引导。";
+    }
+  }
+
+  async function load() {
+    try {
+      const v = await api("/api/h5/" + encodeURIComponent(token));
+      paint(v);
+    } catch (e) {
+      $("#notice").textContent = "候诊信息获取失败：" + e.message;
+    }
+  }
+
+  /* ---------- NRS 弹层 ---------- */
+  const scale = $("#nrs-scale");
+  for (let i = 0; i <= 10; i++) {
+    const b = document.createElement("button");
+    b.className = "nrs-btn" + (i === pickedNrs ? " on" : "");
+    b.textContent = i;
+    b.dataset.n = i;
+    scale.appendChild(b);
+  }
+  scale.addEventListener("click", (ev) => {
+    const b = ev.target.closest(".nrs-btn");
+    if (!b) return;
+    pickedNrs = Number(b.dataset.n);
+    $$(".nrs-btn", scale).forEach((x) => x.classList.toggle("on", Number(x.dataset.n) === pickedNrs));
+  });
+  $("#sheet-cancel").addEventListener("click", () => $("#sheet").classList.remove("on"));
+
+  function openSheet() { $("#sheet").classList.add("on"); }
+
+  /* ---------- 上报 ---------- */
+  async function submit(kind, nrs) {
+    const btn = $(".act[data-kind='" + kind + "']");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api("/api/report", {
+        body: { token, kind, nrs: nrs ?? null, label: KIND_LABEL[kind] || kind,
+                text: KIND_LABEL[kind] || kind },
+      });
+      const box = $("#reply");
+      box.style.display = "block";
+      box.style.background = r.escalated ? "#fff5f4" : "#f8fafc";
+      box.style.borderColor = r.escalated ? "#fecdca" : "#e2e8f0";
+      box.style.color = r.escalated ? "#912018" : "#41506b";
+      $("#reply-tag").textContent = r.escalated ? "已升级 · 优先处理" : "已记录";
+      $("#reply-text").textContent = r.message || "";
+      $("#reply-extra").textContent = r.escalated
+        ? `分级由 ${r.old_level} 级 → ${r.new_level} 级，已同步通知当班医生`
+        : "同级别，护士会按计划复测；如继续加重请再点一次";
+      if (r.escalated) { beep(1); toast("已升级，护士马上过来", "err"); }
+      else toast("已提交，护士站收到", "ok");
+      await load();
+    } catch (e) {
+      toast("提交失败：" + e.message, "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  document.addEventListener("click", (ev) => {
+    const act = ev.target.closest(".act");
+    if (!act) return;
+    const kind = act.dataset.kind;
+    if (kind === "pain") { openSheet(); return; }
+    submit(kind, null);
+  });
+
+  $("#sheet-submit").addEventListener("click", () => {
+    $("#sheet").classList.remove("on");
+    submit("pain", pickedNrs);
+  });
+
+  load();
+  setInterval(load, 8000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TriageOS · 急诊分诊工作台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <div>
+      <div class="brand-title">TriageOS 分诊台</div>
+      <div class="brand-sub">急诊分诊决策中枢 · 6 Agent</div>
+    </div>
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="top-stat"><b id="stat-agent">6/6</b><span>AGENT 在线</span></div>
+  <div class="top-stat"><b id="stat-rules">19</b><span>排雷规则</span></div>
+  <div class="top-stat alarm"><b id="stat-pending">0</b><span>待医生接管</span></div>
+  <div class="top-stat"><b id="stat-wait">0</b><span>候诊中</span></div>
+  <div class="clock" id="clock">--:--:--</div>
+  <a class="btn btn-sm" href="/doctor" target="_blank" rel="noopener">医生接管台 ↗</a>
+</header>
+
+<main class="wrap">
+  <!-- ================= 左：接诊 ================= -->
+  <div class="col col-left">
+    <section class="card">
+      <div class="card-head">
+        <h2>接诊录入</h2>
+        <span class="hint">按患者原话写，不用翻译</span>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="field"><label>姓名</label><input type="text" id="f-name" placeholder="王建国"></div>
+          <div class="field"><label>年龄</label><input type="number" id="f-age" min="0" max="120" placeholder="58"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>性别</label>
+            <select id="f-sex"><option>男</option><option>女</option><option value="未知">未知</option></select>
+          </div>
+          <div class="field"><label>疼痛评分 NRS<span class="tip">0–10</span></label>
+            <input type="number" id="f-nrs" min="0" max="10" placeholder="可留空">
+          </div>
+        </div>
+        <div class="field">
+          <label>主诉<span class="req">*</span><span class="tip">用患者的话</span></label>
+          <textarea id="f-chief" placeholder="例：胸口像被刀割一样疼，一下子到最疼，从胸口撕到后背，一身大汗"></textarea>
+        </div>
+        <div class="field">
+          <label>生命体征<span class="tip">留空则从文本里抠</span></label>
+          <div class="vitals-grid">
+            <div><label>收缩压</label><input type="number" id="f-bp_sys" placeholder="120"></div>
+            <div><label>舒张压</label><input type="number" id="f-bp_dia" placeholder="80"></div>
+            <div><label>心率</label><input type="number" id="f-p" placeholder="80"></div>
+            <div><label>呼吸</label><input type="number" id="f-r" placeholder="18"></div>
+            <div><label>体温</label><input type="number" step="0.1" id="f-t" placeholder="36.5"></div>
+            <div><label>血氧 %</label><input type="number" id="f-spo2" placeholder="98"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>既往史 / 用药<span class="tip">口语即可</span></label>
+          <input type="text" id="f-history" placeholder="高血压十年，抽烟，房颤">
+        </div>
+        <div class="field">
+          <label>旧化验单<span class="tip">粘贴文字，或拍图后转录</span></label>
+          <textarea id="f-lab" placeholder="肌钙蛋白I 0.82 ng/mL ↑&#10;D-二聚体 6.4 mg/L FEU ↑"></textarea>
+        </div>
+        <div class="field">
+          <label>过敏史</label>
+          <input type="text" id="f-allergy" placeholder="青霉素过敏 / 否认药物过敏">
+        </div>
+        <button class="btn btn-primary btn-block" id="btn-triage">接入并跑完 6 个 Agent</button>
+        <div class="small muted" style="margin-top:7px;text-align:center">
+          ① 采集 → ② 排雷 → ③ 定级 → ④ 质控 → ⑤ 监测 → ⑥ 话术
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>演示病例</h2><span class="hint" id="case-hint">加载中</span></div>
+      <div class="card-body tight" style="padding-top:8px">
+        <div class="case-list" id="case-list"></div>
+        <div class="btn-row" style="margin-top:9px">
+          <button class="btn btn-sm" id="btn-seed">填充候诊队列</button>
+          <button class="btn btn-sm btn-ghost" id="btn-reset">清空全部</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================= 中：决策 ================= -->
+  <div class="col col-center">
+    <div id="result">
+      <div class="card">
+        <div class="card-head"><h2>待接入</h2><span class="hint">左侧录入或点一个演示病例</span></div>
+        <div class="card-body" style="padding:26px 22px">
+          <div style="display:flex;gap:26px;flex-wrap:wrap">
+            <div style="flex:1;min-width:250px">
+              <div style="font-size:15px;font-weight:700;margin-bottom:8px">六个 Agent，三段流水线</div>
+              <div class="small muted" style="line-height:1.85">
+                <b style="color:var(--ink-2)">第一阶段 · 接诊与排雷</b><br>
+                ① 信息采集与多模态：把大实话翻成医学术语、解析旧化验单<br>
+                ② 红旗风险预警：揪出「一旦漏诊就会死」的病<br><br>
+                <b style="color:var(--ink-2)">第二阶段 · 定级与质控</b><br>
+                ③ 分级裁判：按 ESI 打分，决定抢救还是排队<br>
+                ④ 交叉核验质控：盯着裁判，防低判、防漏诊<br><br>
+                <b style="color:var(--ink-2)">第三阶段 · 候诊与沟通</b><br>
+                ⑤ 动态候诊监测：扫码喊疼 → 立刻重评估<br>
+                ⑥ 医患沟通安抚：三版话术，给暴躁家属一个解释
+              </div>
+            </div>
+            <div style="flex:1;min-width:230px">
+              <div class="alert blue"><b>底座 1</b>　医学术语语义库：54 个症状术语 × 329 条口语变体 + 21 项化验</div>
+              <div class="alert blue"><b>底座 2</b>　Human-in-the-loop：高危 / Agent 吵架 / 患者上报 → 工单呼叫真人医生</div>
+              <div class="alert amber"><b>演示建议</b>　先点「填充候诊队列」，再跑「③ 宫外孕」病例，看质控怎么把漏掉的 hCG 卡住</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 右：队列 / HITL / 二维码 ================= -->
+  <div class="col col-right">
+    <section class="card">
+      <div class="card-head"><h2>候诊队列</h2><span class="hint" id="queue-hint">—</span></div>
+      <div class="card-body tight" id="queue"><div class="empty"><span class="big">◷</span>暂无候诊患者</div></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Human-in-the-loop</h2>
+        <span class="hint" id="hitl-hint">—</span>
+      </div>
+      <div class="card-body tight" id="hitl"><div class="empty"><span class="big">✓</span>没有待接管工单</div></div>
+    </section>
+
+    <section class="card" id="qr-card" hidden>
+      <div class="card-head"><h2>患者扫码入口</h2><span class="hint">手机扫一下即可上报</span></div>
+      <div class="card-body">
+        <div class="qr-card">
+          <div class="qr-box" id="qr-box"></div>
+          <div class="qr-info">
+            <div class="t" id="qr-name">—</div>
+            <div class="u" id="qr-url">—</div>
+            <div class="btn-row">
+              <button class="btn btn-sm" id="btn-copy-h5">复制链接</button>
+              <button class="btn btn-sm btn-primary" id="btn-open-h5">模拟扫码</button>
+            </div>
+          </div>
+        </div>
+        <div class="small muted" style="margin-top:9px">
+          手机需与电脑同一 Wi-Fi；用 <span class="mono">--lan</span> 启动时二维码会自动指向局域网 IP。
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <b>TriageOS 演示原型</b> · 仅用于流程与规则演练，不构成临床决策依据，不用于真实诊疗 · v1.0
+</footer>
+
+<script src="/static/app.js"></script>
+<script>
+(() => {
+  const state = { cases: [], selected: null, lastPending: -1, commsTone: null };
+
+  startClock($("#clock"));
+
+  /* ------------------------------------------------ 表单 */
+  const FIELDS = ["name", "age", "sex", "nrs", "chief", "bp_sys", "bp_dia", "p", "r", "t", "spo2", "history", "lab", "allergy"];
+  const idOf = (k) => (k === "history" ? "f-history" : k === "lab" ? "f-lab" : "f-" + k);
+
+  function fillForm(p) {
+    FIELDS.forEach((k) => {
+      const el = $("#" + idOf(k));
+      if (!el) return;
+      let v = p[k];
+      if (k === "history") v = p.history_text;
+      if (k === "lab") v = p.lab_text;
+      el.value = v === undefined || v === null ? "" : v;
+    });
+  }
+
+  function readForm() {
+    const payload = {};
+    FIELDS.forEach((k) => {
+      const el = $("#" + idOf(k));
+      if (!el) return;
+      const v = el.value.trim();
+      if (k === "history") { payload.history_text = v; return; }
+      if (k === "lab") { payload.lab_text = v; return; }
+      payload[k] = v;
+    });
+    return payload;
+  }
+
+  /* ------------------------------------------------ 病例列表 */
+  async function loadCases() {
+    try {
+      const data = await api("/api/demo/cases");
+      state.cases = data.cases;
+      $("#case-hint").textContent = data.cases.length + " 例";
+      $("#case-list").innerHTML = data.cases.map((c) => `
+        <div class="case-item" data-key="${c.key}" title="${escapeHTML(c.tag)}">
+          <span>${escapeHTML(c.title)}</span>
+          <span class="tag">${escapeHTML(c.tag)}</span>
+        </div>`).join("");
+    } catch (e) { toast("病例加载失败：" + e.message, "err"); }
+  }
+
+  $("#case-list").addEventListener("click", async (ev) => {
+    const item = ev.target.closest(".case-item");
+    if (!item) return;
+    try {
+      const data = await api("/api/demo/cases");
+      const c = data.cases.find((x) => x.key === item.dataset.key);
+      if (!c) return;
+      fillForm(c.patient);
+      toast(`已装载：${c.tag}`, "ok");
+      $("#btn-triage").click();
+    } catch (e) { toast(e.message, "err"); }
+  });
+
+  /* ------------------------------------------------ 跑分诊 */
+  $("#btn-triage").addEventListener("click", async () => {
+    const payload = readForm();
+    if (!payload.chief) { toast("主诉不能为空——让患者把原话写出来", "err"); return; }
+    const btn = $("#btn-triage");
+    btn.disabled = true;
+    btn.textContent = "6 个 Agent 正在跑…";
+    try {
+      const visit = await api("/api/triage", { body: payload });
+      state.selected = visit;
+      state.commsTone = null;
+      renderVisit(visit);
+      await refreshState();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      toast("分诊失败：" + e.message, "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "接入并跑完 6 个 Agent";
+    }
+  });
+
+  /* ------------------------------------------------ 渲染：全景 */
+  function renderVisit(v) {
+    const qc = v.qc || {};
+    const sc = v.screening || {};
+    const j = v.judgment || {};
+    const level = v.final_level || v.esi || j.level;
+    const meta = ESI_META[level] || {};
+    const flags = sc.flags || [];
+    const nrs = v.nrs ?? j.reasons?.[0]?.nrs ?? "—";
+    const wait = { 1: 0, 2: 10, 3: 30, 4: 60, 5: 120 }[level] ?? 30;
+
+    const html = [];
+    html.push(`
+      <div class="verdict v${level}">
+        ${esiBadge(level, "lg")}
+        <div class="verdict-main">
+          <h1>${escapeHTML(v.name)}　<span class="num" style="font-size:15px;color:var(--ink-3)">${v.age ?? "?"} 岁 · ${escapeHTML(v.sex || "未知")} · ${v.stage}</span></h1>
+          <div class="sub"><b>${meta.label || ""}</b>　${level === 1 ? "立即进入抢救室" : "目标候诊 ≤ <b>" + wait + "</b> 分钟"}　分流：<b>${level === 1 ? "抢救室" : level === 2 ? "抢救区/监护" : "候诊区"}</b></div>
+          <div class="sub" style="margin-top:3px">主诉：${escapeHTML(v.chief)}</div>
+        </div>
+        <div class="verdict-side">
+          <div class="mini-stat"><b>${flags.length}</b><span>红旗</span></div>
+          <div class="mini-stat"><b class="num">${v.nrs ?? "—"}</b><span>NRS</span></div>
+          <div class="mini-stat" style="max-width:96px"><b style="font-size:12px;color:${qc.conflict ? "var(--red)" : "var(--green)"}">${escapeHTML(qc.verdict || "—")}</b><span>质控</span></div>
+        </div>
+      </div>
+      <div class="jury">
+        ${(qc.jury || []).map((x, i) => `
+          ${i === 1 ? '<div class="jury-vs">vs</div>' : ""}
+          <div class="jury-card">
+            <div class="role">${escapeHTML(x.role)}</div>
+            <div class="lv">ESI ${x.level}</div>
+            <div class="arg">${escapeHTML(x.argument).slice(0, 120)}</div>
+          </div>`).join("")}
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-sm btn-primary" data-act="open-comms">生成家属话术</button>
+        <button class="btn btn-sm" data-act="open-h5">模拟扫码上报</button>
+        <button class="btn btn-sm" data-act="call-doctor">呼叫医生接管</button>
+        <button class="btn btn-sm btn-ghost" data-act="refresh">刷新状态</button>
+      </div>
+    `);
+
+    html.push(`<div class="pipeline">`);
+    const order = ["intake", "redflag", "judge", "qc", "watch", "comms"];
+    order.forEach((key) => {
+      const a = (v.agents || {})[key];
+      if (!a) return;
+      const open = ["critical", "warn"].includes(a.status) || key === "judge" ? "open" : "";
+      const richBody = ["redflag", "judge", "qc", "comms"].includes(key);
+      html.push(`
+        <article class="agent st-${a.status} ${open}" data-agent="${key}">
+          <div class="agent-head">
+            <div class="agent-no">${["①","②","③","④","⑤","⑥"][a.no - 1] || a.no}</div>
+            <div class="agent-title">
+              <h3>${escapeHTML(a.name)} <span class="status st-${a.status}">${({done:"完成",warn:"需注意",critical:"高危",watching:"监测中"})[a.status] || a.status}</span></h3>
+              <div class="role">${escapeHTML(a.role)} · 置信度 ${a.confidence} · ${a.elapsed_ms}ms</div>
+              <div class="agent-headline">${escapeHTML(a.headline)}</div>
+            </div>
+            <div class="agent-meta">${open ? "" : "▾"}</div>
+          </div>
+          <div class="agent-body">
+            ${richBody ? "" : `<ul class="agent-points">${(a.points || []).map((p) => `<li>${escapeHTML(p)}</li>`).join("")}</ul>`}
+            ${renderExtra(key, a.extra, v)}
+          </div>
+        </article>`);
+    });
+    html.push(`</div>`);
+
+    $("#result").innerHTML = html.join("");
+    renderQR(v);
+  }
+
+  function renderExtra(key, extra, v) {
+    extra = extra || {};
+    if (key === "intake") {
+      const rows = (extra.translation || []).slice(0, 8).map((t) => `
+        <tr><td class="lay">「${escapeHTML(t.lay)}」</td><td class="arrow">→</td><td><span class="tag-term">${escapeHTML(t.term)}</span></td></tr>`).join("");
+      const labs = (extra.labs || []).map((l) => `
+        <tr><td>${escapeHTML(l.name)}</td>
+            <td class="num" style="color:${l.critical ? "var(--red)" : l.abnormal ? "var(--orange)" : "var(--ink-2)"}">${l.value} ${escapeHTML(l.unit)}</td>
+            <td>${l.ref}</td>
+            <td>${l.flag === "正常" ? '<span class="pill gray">正常</span>' : `<span class="pill">${escapeHTML(l.flag)}</span>`}</td></tr>`).join("");
+      return `
+        <div class="divider"></div>
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">大白话 → 标准术语</div>
+        <table class="tbl">${rows || '<tr><td class="muted">未识别到可翻译的症状词</td></tr>'}</table>
+        ${labs ? `<div style="font-size:11px;color:var(--ink-3);margin:11px 0 5px">旧化验单解析</div><table class="tbl"><thead><tr><th>项目</th><th>结果</th><th>参考</th><th>判读</th></tr></thead><tbody>${labs}</tbody></table>` : ""}
+        ${(extra.missing || []).length ? `<div class="alert amber" style="margin-top:10px">待补信息：${escapeHTML((extra.missing || []).join("、"))}</div>` : ""}
+      `;
+    }
+
+    if (key === "redflag") {
+      const flags = (extra.flags || []).map((f) => `
+        <div class="flag-item">
+          <div class="flag-top">
+            <b>${escapeHTML(f.name)}</b>
+            <span class="pill">${f.tier === 0 ? "致命" : "高危"}</span>
+            <span class="pill gray">置信度 ${f.confidence}</span>
+            <span class="pill gray" style="margin-left:auto">${escapeHTML(f.dept)}</span>
+          </div>
+          <div class="flag-note"><span class="k">为什么致命：</span>${escapeHTML(f.fatal)}</div>
+          <div class="flag-note"><span class="k">时间窗：</span>${escapeHTML(f.window)}</div>
+          <div class="flag-hits">${(f.hits || []).map((h) => `<span class="pill">${escapeHTML(h)}</span>`).join("")}</div>
+          <div class="flag-note"><span class="k">下一步：</span>${escapeHTML(f.action)}</div>
+        </div>`).join("");
+      const ask = (extra.ask || []).length
+        ? `<div class="alert amber" style="margin-top:10px"><div><b>老专家的追问清单（${extra.ask.length}）</b><br>${extra.ask.map((q) => "· " + escapeHTML(q)).join("<br>")}</div></div>` : "";
+      const cleared = (extra.cleared || []).length
+        ? `<div class="small muted" style="margin-top:9px">已排查 ${extra.screened} 类致命急症；未触发：${(extra.cleared || []).slice(0, 8).map(escapeHTML).join("、")}${(extra.cleared || []).length > 8 ? " 等" : ""}</div>` : "";
+      return `<div class="divider"></div>${flags || '<div class="alert blue">没有触发任何致命病预警。</div>'}${ask}${cleared}`;
+    }
+
+    if (key === "judge") {
+      const j = extra.judgment || {};
+      const reasons = (j.reasons || []).map((r) => `<div class="kv"><span class="k">${escapeHTML(r.k)}</span><span class="v" style="font-weight:500">${escapeHTML(r.v)}</span></div>`).join("");
+      const res = (j.resources || []).map((r) => `<span class="pill gray">${escapeHTML(r.label)}</span>`).join(" ");
+      const resBlock = j.path === "step3"
+        ? `<div style="margin-top:8px;font-size:11px;color:var(--ink-3)">预计占用资源（${(j.resources || []).length} 项）</div>
+           <div style="margin-top:4px">${res || '<span class="small muted">0 项资源 → 按 ESI 归 5 级</span>'}</div>`
+        : `<div class="alert blue" style="margin-top:8px;font-size:11.5px">已在第 ${j.path === "step1" ? "1" : j.path === "step2" ? "2" : "4"} 步定级，资源项统计不参与计算</div>`;
+      return `<div class="divider"></div>${reasons}${resBlock}
+        <div class="small muted" style="margin-top:8px">算法路径：${escapeHTML(j.path || "")}　·　${j.mode === "4" ? "简化四级制" : "标准 ESI 五级制"}（界面同时给出 ESI ${j.level} / 四级制 ${j.level_4}）</div>`;
+    }
+
+    if (key === "qc") {
+      const qc = extra.qc || {};
+      const checks = (qc.checks || []).map((c) => `
+        <div class="kv"><span class="k" style="min-width:104px">${c.level === "critical" ? "🔴" : c.level === "major" ? "🟠" : "⚪"} ${escapeHTML(c.name)}</span>
+        <span class="v" style="font-weight:500">${escapeHTML(c.detail)}</span></div>`).join("");
+      return `<div class="divider"></div>${checks || '<div class="alert blue">八项交叉核验全部通过。</div>'}`;
+    }
+
+    if (key === "watch") {
+      return "";  // 卡片正文已经说明了复评节奏，细节在 extra 里给接口用
+    }
+
+    if (key === "comms") {
+      return `<div class="divider"></div><div id="comms-box">${renderComms(extra.comms || {}, state.commsTone)}</div>`;
+    }
+    return "";
+  }
+
+  function renderComms(c, tone) {
+    const variants = c.variants || [];
+    const active = variants.find((x) => x.tone === (tone || c.tone)) || variants[0] || {};
+    return `
+      <div class="tone-tabs">
+        ${variants.map((x) => `<button class="tone-tab ${x.tone === active.tone ? "on" : ""}" data-tone="${x.tone}">${escapeHTML(x.label)}</button>`).join("")}
+      </div>
+      <div class="script" id="script-text">${escapeHTML(active.text || "")}</div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-sm" data-act="copy-script">复制这段话</button>
+      </div>
+      <div class="divider"></div>
+      <div style="font-size:11px;color:var(--ink-3);margin-bottom:5px">家属原话 → 情绪识别 → 改写话术</div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="family-msg" placeholder="例：等这么久凭什么？我要投诉你们！">
+        <button class="btn btn-sm btn-primary" data-act="tone-reply" style="flex:none">识别并改写</button>
+      </div>
+      <div id="tone-result" class="alert blue" style="margin-top:8px;display:none"></div>
+      <div class="rule-list">
+        <b style="color:var(--ink-2)">沟通禁忌</b>
+        ${(c.taboos || []).map((t) => `<li>${escapeHTML(t)}</li>`).join("")}
+      </div>
+      ${(c.next_check ? `<div class="alert blue" style="margin-top:8px">${escapeHTML(c.next_check)}</div>` : "")}
+    `;
+  }
+
+  /* ------------------------------------------------ 二维码 */
+  function renderQR(v) {
+    const card = $("#qr-card");
+    card.hidden = false;
+    $("#qr-box").innerHTML = v.qr_svg || "";
+    $("#qr-name").textContent = `${v.name} · ${v.id}`;
+    $("#qr-url").textContent = v.h5_url || "";
+    card.dataset.url = v.h5_url || "";
+  }
+
+  $("#btn-copy-h5").addEventListener("click", () => copyText($("#qr-card").dataset.url || ""));
+  $("#btn-open-h5").addEventListener("click", () => {
+    const url = $("#qr-card").dataset.url;
+    if (url) window.open(url, "_blank");
+  });
+
+  /* ------------------------------------------------ 结果区交互 */
+  $("#result").addEventListener("click", async (ev) => {
+    const agentHead = ev.target.closest(".agent-head");
+    if (agentHead) { agentHead.parentElement.classList.toggle("open"); return; }
+
+    const toneBtn = ev.target.closest(".tone-tab");
+    if (toneBtn) {
+      state.commsTone = toneBtn.dataset.tone;
+      const comms = state.selected?.agents?.comms?.extra?.comms || {};
+      $("#comms-box").innerHTML = renderComms(comms, state.commsTone);
+      return;
+    }
+
+    const act = ev.target.closest("[data-act]")?.dataset.act;
+    if (!act) return;
+    const v = state.selected;
+    if (!v) return;
+
+    if (act === "open-comms") {
+      const el = $('[data-agent="comms"]');
+      if (el) { el.classList.add("open"); el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    } else if (act === "open-h5") {
+      if (v.h5_url) window.open(v.h5_url, "_blank");
+    } else if (act === "call-doctor") {
+      try {
+        await api("/api/call-doctor", { body: { visit_id: v.id, note: "护士站手动呼叫医生接管" } });
+        toast("已呼叫当班医生，工单已进入接管台", "ok");
+        refreshState();
+      } catch (e) {
+        toast("呼叫失败：" + e.message, "err");
+      }
+      window.open("/doctor", "_blank");
+    } else if (act === "tone-reply") {
+      const msg = ($("#family-msg")?.value || "").trim();
+      if (!msg) { toast("先写一句家属的原话", "err"); return; }
+      const box = $("#tone-result");
+      box.style.display = "block";
+      box.textContent = "正在识别情绪并改写信…";
+      try {
+        const r = await api("/api/report/tone", { body: { token: v.token, message: msg } });
+        box.innerHTML = `<div><b>识别情绪：${TONE_NAME[r.tone] || r.tone}</b></div>
+          <div style="margin-top:5px;white-space:pre-wrap">${escapeHTML(r.reply)}</div>`;
+        state.commsTone = r.tone;
+      } catch (e) {
+        box.textContent = "改写失败：" + e.message;
+      }
+    } else if (act === "copy-script") {
+      copyText($("#script-text")?.textContent || "");
+    } else if (act === "refresh") {
+      await selectVisit(v.id);
+    }
+  });
+
+  /* ------------------------------------------------ 右侧：状态轮询 */
+  async function refreshState() {
+    try {
+      const s = await api("/api/state");
+      $("#stat-pending").textContent = s.stats.pending;
+      $("#stat-wait").textContent = s.stats.waiting;
+      $("#stat-rules").textContent = s.meta.screened;
+
+      $("#queue-hint").textContent = `候诊 ${s.stats.waiting} · 抢救 ${s.stats.critical}`;
+      $("#queue").innerHTML = s.queue.length ? s.queue.map((q) => `
+        <div class="queue-item ${state.selected && state.selected.id === q.id ? "sel" : ""}" data-id="${q.id}">
+          ${esiBadge(q.esi)}
+          <div class="queue-main">
+            <div class="nm">${escapeHTML(q.name)} <span class="muted small">${q.age ?? "?"}岁${escapeHTML(q.sex || "")}</span></div>
+            <div class="cf">${escapeHTML(q.flag || q.chief)}</div>
+          </div>
+          <div class="queue-side"><b>${q.stage === "抢救" ? "抢救中" : waitText(Math.max(1, q.wait_minutes))}</b>${q.stage === "抢救" ? "抢救室" : "已等 " + q.wait_minutes + " 分"}</div>
+        </div>`).join("") : `<div class="empty"><span class="big">◷</span>暂无候诊患者</div>`;
+
+      $("#hitl-hint").textContent = s.stats.pending ? `P0 优先 · ${s.stats.pending} 待办` : "全部已处理";
+      $("#hitl").innerHTML = s.tickets.length ? s.tickets.map((t) => `
+        <div class="alert ${t.priority === "P0" ? "red" : "amber"}" style="cursor:pointer" data-ticket="${t.id}">
+          <div style="flex:1">
+            <b>${t.priority} · ${escapeHTML(t.patient)}</b>　<span class="small">${escapeHTML(t.reason).slice(0, 46)}</span>
+            <div class="small" style="opacity:.8;margin-top:2px">${t.overdue ? "⏰ 已超 SLA" : "SLA " + t.sla_minutes + " 分钟"} · ${escapeHTML(t.agent)}</div>
+          </div>
+          <span class="t">${clockOf(t.created_at)}</span>
+        </div>`).join("") : `<div class="empty"><span class="big">✓</span>没有待接管工单</div>`;
+
+      if (state.lastPending >= 0 && s.stats.pending > state.lastPending) {
+        toast(`新工单：${s.tickets[0]?.reason || "医生需处理"}`, "err");
+      }
+      state.lastPending = s.stats.pending;
+
+      if (state.selected) {
+        const q = s.queue.find((x) => x.id === state.selected.id);
+        if (q && (q.esi !== state.selected.esi || q.stage !== state.selected.stage)) {
+          selectVisit(state.selected.id, true);
+        }
+      }
+    } catch (e) { /* 静默：轮询失败不打扰演示 */ }
+  }
+
+  async function selectVisit(id, quiet = false) {
+    try {
+      const v = await api("/api/visit/" + id);
+      state.selected = v;
+      state.commsTone = null;
+      renderVisit(v);
+      if (!quiet) $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) { toast(e.message, "err"); }
+  }
+
+  $("#queue").addEventListener("click", (ev) => {
+    const item = ev.target.closest(".queue-item");
+    if (item) selectVisit(item.dataset.id);
+  });
+  $("#hitl").addEventListener("click", () => window.open("/doctor", "_blank"));
+
+  /* ------------------------------------------------ 演示辅助 */
+  $("#btn-seed").addEventListener("click", async () => {
+    try {
+      const r = await api("/api/demo/seed", { body: {} });
+      toast(`已填充 ${r.created.length} 位候诊患者`, "ok");
+      await refreshState();
+    } catch (e) { toast(e.message, "err"); }
+  });
+
+  $("#btn-reset").addEventListener("click", async () => {
+    if (!confirm("清空所有患者、工单与审计记录？")) return;
+    await api("/api/reset", { body: {} });
+    state.selected = null;
+    state.lastPending = -1;
+    $("#qr-card").hidden = true;
+    location.reload();
+  });
+
+  /* ------------------------------------------------ 启动 */
+  (async () => {
+    await loadCases();
+    const params = new URLSearchParams(location.search);
+    const visitId = params.get("visit");
+    const caseKey = params.get("case");
+    if (visitId) await selectVisit(visitId, true);
+    else if (caseKey) {
+      const item = document.querySelector(`.case-item[data-key="${caseKey}"]`);
+      if (item) item.click();  // 深链：/?case=ectopic 直接跑这个病例
+    }
+  })();
+  refreshState();
+  setInterval(refreshState, 2500);
+})();
+</script>
+</body>
+</html>
